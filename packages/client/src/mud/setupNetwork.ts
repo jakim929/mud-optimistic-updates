@@ -29,6 +29,7 @@ import {
 import { transactionQueue, writeObserver } from '@latticexyz/common/actions'
 import { Subject, share } from 'rxjs'
 import { createMemoryClient } from 'tevm'
+import { createCommon, tevmDefault } from 'tevm/common'
 import { Address } from '@ethereumjs/util'
 
 /*
@@ -64,12 +65,14 @@ export async function setupNetwork() {
       blockTag: 'latest',
     },
     customPrecompiles: [storePrecompile.precompile()],
+    // a tevm common is an extension of a viem chain
+    common: createCommon(
+      networkConfig.chain,
+    )
     // loggingLevel: 'debug',
   })
 
   const publicClient = memoryClient
-  // @ts-ignore
-  publicClient.chain = networkConfig.chain
 
   const vm = await memoryClient.tevm.getVm()
   memoryClient.tevm.on('message', (data) => {

@@ -89,15 +89,11 @@ export function createSystemCalls(
   }
 
   const addTask = async (label: string) => {
-    const functionData = encodeFunctionData({
+    const tevmCallResult = await memoryClient.tevmContract({
+      to: worldContract.address,
       abi: worldContract.abi,
       functionName: 'app__addTask',
       args: [label],
-    })
-
-    const tevmCallResult = await memoryClient.tevmCall({
-      to: worldContract.address,
-      data: functionData,
       from: walletClient.account.address,
       throwOnFail: false,
       stateOverrideSet: precompileStateOverrideSet,
@@ -136,15 +132,11 @@ export function createSystemCalls(
   }
 
   const deleteTask = async (id: Hex) => {
-    const functionData = encodeFunctionData({
+    const tevmCallResult = await memoryClient.tevmContract({
+      to: worldContract.address,
       abi: worldContract.abi,
       functionName: 'app__deleteTask',
       args: [id],
-    })
-
-    const tevmCallResult = await memoryClient.tevmCall({
-      to: worldContract.address,
-      data: functionData,
       from: walletClient.account.address,
       throwOnFail: false,
       stateOverrideSet: precompileStateOverrideSet,
