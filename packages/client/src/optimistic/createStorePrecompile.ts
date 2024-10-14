@@ -106,13 +106,20 @@ export const createStorePrecompile = ({ address }: { address: Address }) => {
         logs: [],
       }
     },
-    // New handlers for missing functions
     deleteRecord: async ({ args }) => {
       console.log('StorePrecompile: deleteRecord called with args:', args)
+
+      const [tableId, keyTuple] = args
+
+      const { logs } = await new StoreCore(address).deleteRecord(
+        tableId,
+        keyTuple,
+      )
+
       return {
         returnValue: undefined,
         executionGasUsed: 0n,
-        logs: [],
+        logs,
       }
     },
     popFromDynamicField: async ({ args }) => {

@@ -54,6 +54,7 @@ export class StoreCore {
     // TODO: currently unimplemented: also handle the dynamic data
     // This may emit another log
 
+    console.log('StorePrecompile: emitting Store_SetRecord', setRecordLog)
     return { logs: [setRecordLog] }
   }
 
@@ -115,6 +116,23 @@ export class StoreCore {
     }
 
     console.log('StorePrecompile: emitting Store_SpliceStaticData', log)
+    return { logs: [log] }
+  }
+
+  async deleteRecord(
+    tableId: ResourceId,
+    keyTuple: readonly Hex[],
+  ): Promise<StoreExecResult> {
+    const log: StoreLog = {
+      address: this.address,
+      eventName: 'Store_DeleteRecord',
+      args: {
+        tableId: tableId,
+        keyTuple: keyTuple,
+      },
+    }
+
+    console.log('StorePrecompile: emitting Store_DeleteRecord', log)
     return { logs: [log] }
   }
 }

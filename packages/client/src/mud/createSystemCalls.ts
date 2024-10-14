@@ -79,7 +79,7 @@ export function createSystemCalls(
         return {
           ...log,
           // hack until https://github.com/evmts/tevm-monorepo/pull/1482 lands
-          data: removeExtraTableId(log.topics[0])(log.data),
+          data: removeExtraTableId(log.topics[0] as Hex)(log.data),
         }
       }),
     })
@@ -147,7 +147,7 @@ export function createSystemCalls(
       data: functionData,
       from: walletClient.account.address,
       throwOnFail: false,
-      createTransaction: true,
+      stateOverrideSet: precompileStateOverrideSet,
     })
     console.log('delete tevmCallResult', tevmCallResult)
 
@@ -174,6 +174,11 @@ const removeExtraTableId =
       '0x8dbb3a9672eebfd3773e72dd9c102393436816d832c7ba9e1e1ac8fcadcac7a9'
     ) {
       return removeExtraTableIdForSetRecord(data)
+    } else if (
+      firstTopic ===
+      '0x0e1f72f429eb97e64878619984a91e687ae91610348b9ff4216782cc96e49d07'
+    ) {
+      return removeExtraTableIdForDeleteRecord(data)
     }
     return data
   }
@@ -221,5 +226,20 @@ function removeExtraTableIdForSetRecord(data: Hex): Hex {
       { type: 'bytes', name: 'dynamicData' },
     ],
     [decodedData[1], decodedData[2], decodedData[3], decodedData[4]],
+  )
+}
+
+function removeExtraTableIdForDeleteRecord(data: Hex): Hex {
+  const decodedData = decodeAbiParameters(
+    [
+      { type: 'bytes32', name: 'tableId' },
+      { type: 'bytes32[]', name: 'keyTuple' },
+    ],
+    data,
+  )
+
+  return encodeAbiParameters(
+    [{ type: 'bytes32[]', name: 'keyTuple' }],
+    [decodedData[1]],
   )
 }
