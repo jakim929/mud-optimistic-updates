@@ -1,7 +1,7 @@
 import { Hex, Log } from 'viem'
 import { FieldLayout } from './FieldLayout'
-import { ExecResult } from 'tevm/evm'
 import { StoreEventsAbiItem, StoreEventsAbi } from '@latticexyz/store'
+import { EncodedLengths } from './EncodedLengths'
 
 type StoreLog = Pick<
   Log<bigint, number, false, StoreEventsAbiItem, true, StoreEventsAbi>,
@@ -14,7 +14,7 @@ type StoreExecResult = {
 
 type ResourceId = Hex
 
-// Only implements the fieldLayout-specified methods
+// Only implements the fieldLayout-specified methods, if both exist
 
 // TODO: unimplemented
 // dynamic fields
@@ -25,6 +25,36 @@ export class StoreCore {
 
   constructor(address: Hex) {
     this.address = address
+  }
+
+  // ResourceId tableId,
+  // bytes32[] memory keyTuple,
+  // bytes memory staticData,
+  // EncodedLengths encodedLengths,
+  // bytes memory dynamicData
+  async setRecord(
+    tableId: ResourceId,
+    keyTuple: readonly Hex[],
+    staticData: Hex,
+    encodedLengths: Hex,
+    dynamicData: Hex,
+  ): Promise<StoreExecResult> {
+    const setRecordLog: StoreLog = {
+      eventName: 'Store_SetRecord',
+      address: this.address,
+      args: {
+        tableId: tableId,
+        keyTuple: keyTuple,
+        staticData: staticData,
+        encodedLengths: encodedLengths,
+        dynamicData: dynamicData,
+      },
+    }
+
+    // TODO: currently unimplemented: also handle the dynamic data
+    // This may emit another log
+
+    return { logs: [setRecordLog] }
   }
 
   async setField(

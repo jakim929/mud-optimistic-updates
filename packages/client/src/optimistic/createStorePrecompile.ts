@@ -170,10 +170,21 @@ export const createStorePrecompile = ({ address }: { address: Address }) => {
     },
     setRecord: async ({ args }) => {
       console.log('StorePrecompile: setRecord called with args:', args)
+
+      const [tableId, keyTuple, staticData, encodedLengths, dynamicData] = args
+
+      const { logs } = await new StoreCore(address).setRecord(
+        tableId,
+        keyTuple,
+        staticData,
+        encodedLengths,
+        dynamicData,
+      )
+
       return {
         returnValue: undefined,
         executionGasUsed: 0n,
-        logs: [],
+        logs,
       }
     },
     setStaticField: async ({ args }) => {

@@ -6,6 +6,7 @@
 import {
   Address,
   Hex,
+  Log,
   decodeAbiParameters,
   encodeAbiParameters,
   encodeFunctionData,
@@ -17,6 +18,25 @@ import {
 } from 'viem'
 import { SetupNetworkResult } from './setupNetwork'
 import { storeEventsAbi } from '@latticexyz/store'
+
+// 0x629a4c26e296b22a8e0856e9f6ecb2d1008d7e00081111962cd175fa7488e175
+const STORAGE_SLOT = keccak256(toBytes('mud.store.storage.StoreSwitch'))
+
+const storePrecompileAddress =
+  '0x5cfe08587E1fbDc2C0e8e50ba4B5f591F45B1849' as const as Address
+
+const precompileStateOverrideSet = {
+  // app__task system
+  ['0x19Be2cfAF9D0673546d67BdCb5565e0EE0feBe78']: {
+    state: {
+      [STORAGE_SLOT]: storePrecompileAddress,
+    },
+  },
+
+  [storePrecompileAddress]: {
+    code: '0x6068', // hack to bypass EXTCODESIZE check when making external calls to the store precompile
+  },
+} as const
 
 export type SystemCalls = ReturnType<typeof createSystemCalls>
 
@@ -51,13 +71,22 @@ export function createSystemCalls(
     storageAdapter,
   }: SetupNetworkResult,
 ) {
-  // 0x629a4c26e296b22a8e0856e9f6ecb2d1008d7e00081111962cd175fa7488e175
-  const STORAGE_SLOT = keccak256(toBytes('mud.store.storage.StoreSwitch'))
+  const applyToStore = async (logs: Log[]) => {
+    const parsedLogs = parseEventLogs({
+      abi: storeEventsAbi,
+      // @ts-ignore
+      logs: logs.map((log) => {
+        return {
+          ...log,
+          // hack until https://github.com/evmts/tevm-monorepo/pull/1482 lands
+          data: removeExtraTableId(log.topics[0])(log.data),
+        }
+      }),
+    })
 
-  const storePrecompileAddress =
-    '0x5cfe08587E1fbDc2C0e8e50ba4B5f591F45B1849' as const as Address
-
-  const paddedAddress = pad(storePrecompileAddress, { dir: 'left', size: 32 })
+    // @ts-ignore
+    await storageAdapter({ logs: parsedLogs })
+  }
 
   const addTask = async (label: string) => {
     const functionData = encodeFunctionData({
@@ -71,17 +100,12 @@ export function createSystemCalls(
       data: functionData,
       from: walletClient.account.address,
       throwOnFail: false,
-      createTransaction: true,
+      stateOverrideSet: precompileStateOverrideSet,
     })
 
-    const parsedLogs = parseEventLogs({
-      abi: storeEventsAbi,
-      // @ts-ignore
-      logs: tevmCallResult.logs,
-    })
+    console.log('add tevmCallResult', tevmCallResult)
 
-    // @ts-ignore
-    await storageAdapter({ logs: parsedLogs })
+    await applyToStore((tevmCallResult.logs as Log[]) ?? [])
   }
 
   const toggleTask = async (id: Hex) => {
@@ -103,38 +127,12 @@ export function createSystemCalls(
       to: worldContract.address,
       data: functionData,
       from: walletClient.account.address,
-      stateOverrideSet: {
-        // app__task system
-        ['0x19Be2cfAF9D0673546d67BdCb5565e0EE0feBe78']: {
-          state: {
-            [STORAGE_SLOT]: storePrecompileAddress,
-            // [STORAGE_SLOT]: '0x8d8b6b8414e1e3dcfd4168561b9be6bd3bf6ec4b',
-            // [STORAGE_SLOT]: '0x19Be2cfAF9D0673546d67BdCb5565e0EE0feBe78',
-          },
-        },
-
-        [storePrecompileAddress]: {
-          code: '0x6068', // hack to bypass EXTCODESIZE check when making external calls to the store precompile
-        },
-      },
+      stateOverrideSet: precompileStateOverrideSet,
     })
 
-    console.log('tevmCallResult', tevmCallResult)
+    console.log('toggle tevmCallResult', tevmCallResult)
 
-    const parsedLogs = parseEventLogs({
-      abi: storeEventsAbi,
-      // @ts-ignore
-      logs: tevmCallResult.logs.map((log) => {
-        return {
-          ...log,
-          // hack until https://github.com/evmts/tevm-monorepo/pull/1482 lands
-          data: removeExtraTableId(log.data),
-        }
-      }),
-    })
-
-    // @ts-ignore
-    await storageAdapter({ logs: parsedLogs })
+    await applyToStore((tevmCallResult.logs as Log[]) ?? [])
   }
 
   const deleteTask = async (id: Hex) => {
@@ -151,15 +149,9 @@ export function createSystemCalls(
       throwOnFail: false,
       createTransaction: true,
     })
+    console.log('delete tevmCallResult', tevmCallResult)
 
-    const parsedLogs = parseEventLogs({
-      abi: storeEventsAbi,
-      // @ts-ignore
-      logs: tevmCallResult.logs,
-    })
-
-    // @ts-ignore
-    await storageAdapter({ logs: parsedLogs })
+    await applyToStore((tevmCallResult.logs as Log[]) ?? [])
   }
 
   return {
@@ -169,11 +161,24 @@ export function createSystemCalls(
   }
 }
 
-function removeExtraTableId(data: Hex): Hex {
-  if (!data.startsWith('0x') || data.length < 66) {
+const removeExtraTableId =
+  (firstTopic: Hex) =>
+  (data: Hex): Hex => {
+    if (
+      firstTopic ===
+      '0x8c0b5119d4cec7b284c6b1b39252a03d1e2f2d7451a5895562524c113bb952be'
+    ) {
+      return removeExtraTableIdForSpliceStaticData(data)
+    } else if (
+      firstTopic ===
+      '0x8dbb3a9672eebfd3773e72dd9c102393436816d832c7ba9e1e1ac8fcadcac7a9'
+    ) {
+      return removeExtraTableIdForSetRecord(data)
+    }
     return data
   }
 
+function removeExtraTableIdForSpliceStaticData(data: Hex): Hex {
   // Decode the full data, including the extra tableId
   const decodedData = decodeAbiParameters(
     [
@@ -193,5 +198,28 @@ function removeExtraTableId(data: Hex): Hex {
       { type: 'bytes', name: 'data' },
     ],
     [decodedData[1], decodedData[2], decodedData[3]],
+  )
+}
+
+function removeExtraTableIdForSetRecord(data: Hex): Hex {
+  const decodedData = decodeAbiParameters(
+    [
+      { type: 'bytes32', name: 'tableId' },
+      { type: 'bytes32[]', name: 'keyTuple' },
+      { type: 'bytes', name: 'staticData' },
+      { type: 'bytes32', name: 'encodedLengths' },
+      { type: 'bytes', name: 'dynamicData' },
+    ],
+    data,
+  )
+
+  return encodeAbiParameters(
+    [
+      { type: 'bytes32[]', name: 'keyTuple' },
+      { type: 'bytes', name: 'staticData' },
+      { type: 'bytes32', name: 'encodedLengths' },
+      { type: 'bytes', name: 'dynamicData' },
+    ],
+    [decodedData[1], decodedData[2], decodedData[3], decodedData[4]],
   )
 }
